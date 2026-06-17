@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+supabase
+numpy
+torch
+torchaudio
+sounddevice
+soundfile
+librosa
+scikit-learn
+nemo_toolkit[asr]
+transformers
+audiomentations
+httpx
+requests
