@@ -1,4 +1,4 @@
-# 🎙️ Sistema Biométrico de Voz - Prevención de fraude telefónico mediante DL
+# 🎙️ Sistema Biométrico de Voz - Prevención de fraude telefónico
 
 > Sistema cloud-native de autenticación vocal con detección activa de deepfakes. Desarrollado como Trabajo de Fin de Máster (TFM).
 
