@@ -646,6 +646,7 @@ def saveverificationhistory(dni: str, resultado: dict):
 
 @app.post("/verify")
 @app.post("/verifyfile")
+@app.post("/verify_file")
 async def verify_endpoint(
     request: Request,
     file: UploadFile = File(None),
@@ -654,7 +655,21 @@ async def verify_endpoint(
 ):
     content_type = (request.headers.get("content-type") or "").lower()
     dnifinal = dnireclamado
-    
+
+    # FIX: frontend envía 'dni_reclamado' (con guion bajo); FastAPI Form() no lo mapea automáticamente.
+    # Se lee el form raw para capturar el campo correcto.
+    if not dnifinal:
+        try:
+            form_data = await request.form()
+            dnifinal = (
+                form_data.get("dni_reclamado") or
+                form_data.get("dnireclamado") or
+                form_data.get("dni") or
+                dnifinal
+            )
+        except Exception:
+            pass
+
     if "application/json" in content_type:
         try:
             raw = await request.body()
@@ -684,25 +699,29 @@ async def verify_endpoint(
     intentoactual = session["intentos"]
     logger.info(f"⚡ [TRIGGER] Verificando DNI: {dnifinal} | Intento: {intentoactual}")
 
-    audiocrudo = await asyncio.to_thread(capturevadaudio, 15.0, 2.0, NATIVESR)
+    # ── MODO DE CAPTURA: archivo subido (Inspector UI) o micrófono VAD (ElevenLabs)
+    if file is not None and file.filename:
+        # Inspector UI envía WAV grabado en navegador → usarlo directamente, NO abrir micrófono
+        logger.info(f"📎 [VERIFY] Archivo recibido: {file.filename} — usando audio subido, omitiendo VAD.")
+        try:
+            import io as _io
+            raw_bytes = await file.read()
+            audio_np, audio_sr = sf.read(_io.BytesIO(raw_bytes), dtype="float32", always_2d=False)
+            if audio_np.ndim > 1:
+                audio_np = audio_np[:, 0]
+            if audio_sr != NATIVESR:
+                audio_np = librosa.resample(audio_np, orig_sr=audio_sr, target_sr=NATIVESR)
+            audiocrudo = audio_np
+            logger.info(f"✅ [VERIFY] Audio cargado desde archivo: {len(audiocrudo)/NATIVESR:.2f}s @ {NATIVESR}Hz")
+        except Exception as e_file:
+            logger.error(f"❌ [VERIFY] Error leyendo archivo de audio: {e_file}")
+            return {"estado": "ERROR", "mensaje": f"Error procesando audio subido: {e_file}", "score": 0.0}
+    else:
+        # Sin archivo → captura desde micrófono físico con Silero VAD (ElevenLabs client tool)
+        logger.info("🎙️ [VERIFY] Sin archivo adjunto — activando VAD micrófono físico.")
+        audiocrudo = await asyncio.to_thread(capturevadaudio, 15.0, 2.0, NATIVESR)
+
     pipeline["input"]["status"] = "success"
-    
-    if audiocrudo is None:
-        msg = "No se escuchó al usuario o hay demasiado ruido."
-        pushverifylog(makelogentry(dnifinal, "AUDIOINSUFICIENTE", 0.0, msg, traceid), pipeline)
-        return {"estado": "AUDIOINSUFICIENTE", "mensaje": msg, "score": 0.0}
-
-    if not dnifinal:
-        msg = "Falta DNI"
-        pushverifylog(makelogentry("-", "ERROR", 0.0, msg, traceid), pipeline)
-        return {"estado": "ERROR", "mensaje": msg, "score": 0.0}
-
-    pipeline = {
-        "input": {"status": "active"},
-        "spoof": {"status": "active"},
-        "ai":    {"status": "active"},
-        "db":    {"status": "active"},
-    }
 
     if audiocrudo is None:
         msg = "No se escuchó al usuario o hay demasiado ruido."
@@ -967,6 +986,7 @@ def getallsessions():
         return [
             {
                 "conversationid": s.get("conversationid") or s.get("conversation_id"),
+                "conversation_id": s.get("conversationid") or s.get("conversation_id"),
                 "fecha":          s.get("fechainicio") or s.get("fecha_inicio"),
                 "duracion":       int(s.get("duracionseg") or s.get("duracion_seg") or 0),
                 "dni":            s.get("dniusuario") or s.get("dni_usuario"),
@@ -1071,6 +1091,87 @@ def healthcheck():
 @app.get("/")
 def readindex():
     return FileResponse("static/index.html")
+
+
+# ==============================================================================
+# 10. HISTORIAL — DETALLES DE CONVERSACIÓN Y AUDIO
+# ==============================================================================
+
+@app.get("/history/details/{conv_id}")
+async def get_conversation_details(conv_id: str):
+    """Obtiene la transcripción de una conversación de ElevenLabs por su ID."""
+    if not ELEVENLABS_API_KEY:
+        raise HTTPException(500, "Falta ELEVENLABS_API_KEY en .env")
+    if not conv_id or conv_id in ("undefined", "null", ""):
+        raise HTTPException(400, "conversation_id inválido")
+    try:
+        import httpx
+        headers = {"xi-api-key": ELEVENLABS_API_KEY}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(
+                f"https://api.elevenlabs.io/v1/convai/conversations/{conv_id}",
+                headers=headers,
+            )
+            if r.status_code == 404:
+                return {"transcription": [], "error": "Conversación no encontrada en ElevenLabs."}
+            r.raise_for_status()
+            data = r.json()
+        transcript_raw = data.get("transcript") or []
+        normalized = []
+        for msg in transcript_raw:
+            normalized.append({
+                "role": msg.get("role", "agent"),
+                "text": msg.get("message") or msg.get("text") or "",
+                "time_in_call_secs": msg.get("time_in_call_secs"),
+            })
+        return {
+            "conversation_id": conv_id,
+            "transcription": normalized,
+            "status": data.get("status"),
+            "duration": data.get("call_duration_secs") or data.get("duration"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HISTORY-DETAILS] Error para {conv_id}: {e}")
+        return {"transcription": [], "error": f"Error obteniendo transcripción: {str(e)}"}
+
+
+@app.get("/history/audio/{conv_id}")
+async def get_conversation_audio(conv_id: str):
+    """Proxy del audio de una conversación desde ElevenLabs."""
+    if not ELEVENLABS_API_KEY:
+        raise HTTPException(500, "Falta ELEVENLABS_API_KEY en .env")
+    if not conv_id or conv_id in ("undefined", "null", ""):
+        raise HTTPException(400, "conversation_id inválido")
+    try:
+        import httpx
+        from fastapi.responses import StreamingResponse
+        headers = {"xi-api-key": ELEVENLABS_API_KEY}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(
+                f"https://api.elevenlabs.io/v1/convai/conversations/{conv_id}/audio",
+                headers=headers,
+            )
+            if r.status_code == 404:
+                raise HTTPException(404, "Audio no disponible para esta conversación.")
+            r.raise_for_status()
+            content = r.content
+            content_type = r.headers.get("content-type", "audio/mpeg")
+        return StreamingResponse(
+            iter([content]),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"inline; filename={conv_id}.mp3",
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "no-cache",
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[HISTORY-AUDIO] Error para {conv_id}: {e}")
+        raise HTTPException(500, f"Error obteniendo audio: {str(e)}")
 
 
 if __name__ == "__main__":

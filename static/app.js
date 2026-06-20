@@ -46,7 +46,7 @@ function _makeTraceId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-// ==================== API COMPAT (sin hardcode de 1 sola ruta) ====================
+// ==================== API COMPAT ====================
 // Intenta varias rutas (snake/camel/legacy) y se queda con la primera que responda OK.
 async function _fetchJsonAny(urls, options = {}) {
   let lastErr = null;
@@ -335,7 +335,7 @@ async function checkStatus() {
       if (dot) dot.classList.add('active');
       if (txt) {
         txt.textContent = `Online (${_numOr(data.usuarios, 0)})`;
-        txt.style.color = 'var(--success-text)';
+        txt.style.color = 'var(--success)';
       }
     } else {
       if (dot) dot.classList.remove('active');
@@ -405,7 +405,7 @@ async function updateMonitor() {
     if (!tbody) return;
 
     if (!logData || logData.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-light);">Esperando datos de sensores...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">Esperando datos de sensores...</td></tr>`;
       return;
     }
 
@@ -534,14 +534,14 @@ function renderQueue() {
     li.innerHTML = `
       <span class="material-icons-outlined icon">${icon}</span>
       <span style="flex:1;">${item.filename}</span>
-      <span style="font-size:0.75rem; color:var(--text-light);">Pendiente</span>
+      <span style="font-size:0.75rem; color:var(--text-muted);">Pendiente</span>
     `;
     list.appendChild(li);
   });
 }
 
 
-// Grabación manual (mantenida para que puedas grabar usuarios desde la UI)
+// Grabación manual
 let createAudioCtx = null;
 let createMediaStream = null;
 let createRecorderNode = null;
@@ -569,7 +569,7 @@ async function toggleCreateRecording() {
 
       if (btn) {
         btn.innerHTML = `<span class="material-icons-outlined" style="vertical-align:middle; font-size:18px;">stop_circle</span>`;
-        btn.style.color = 'var(--error-text)';
+        btn.style.color = 'var(--error)';
       }
       if (status) status.classList.remove('hidden');
 
@@ -754,7 +754,7 @@ async function openHistoryModal(dni) {
   if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px;">Cargando...</td></tr>`;
 
   try {
-    // Compat: backend actual usa /userhistory/{dni}; mantenemos /user_history/{dni} por si existe
+    // Compat: backend actual usa /userhistory/{dni}; se mantiene /user_history/{dni} por si existe
     const data = await _fetchJsonAny([`/userhistory/${dni}`, `/user_history/${dni}`]);
 
     if (!data.history || data.history.length === 0) {
@@ -768,9 +768,9 @@ async function openHistoryModal(dni) {
         const scorePct = (_safeScore(h.score) * 100).toFixed(1);
 
         let statusColor = 'var(--text-main)';
-        if (h.estado === 'GENUINO') statusColor = 'var(--success-text)';
-        else if (h.estado === 'FRAUDE') statusColor = 'var(--error-text)';
-        else if (h.estado === 'DEEPFAKE') statusColor = 'var(--error-text)';
+        if (h.estado === 'GENUINO') statusColor = 'var(--success)';
+        else if (h.estado === 'FRAUDE') statusColor = 'var(--error)';
+        else if (h.estado === 'DEEPFAKE') statusColor = 'var(--error)';
 
         return `
           <tr>
@@ -784,7 +784,7 @@ async function openHistoryModal(dni) {
     }
 
   } catch (e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--error-text);">Error al cargar historial.</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--error);">Error al cargar historial.</td></tr>`;
   }
 }
 
@@ -811,7 +811,7 @@ async function cargarHistorialGlobal() {
     applyHistoryFilters();
   } catch (e) {
     console.error("Error loading history", e);
-    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--error-text);">Error de conexión.</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--error);">Error de conexión.</td></tr>`;
   }
 }
 
@@ -852,8 +852,8 @@ function renderHistoryTable() {
 
     let statusColor = 'var(--text-main)';
     const st = String(h.estado || '').toLowerCase();
-    if (st === 'completed') statusColor = 'var(--success-text)';
-    else if (st === 'error' || st === 'failed') statusColor = 'var(--error-text)';
+    if (st === 'completed') statusColor = 'var(--success)';
+    else if (st === 'error' || st === 'failed') statusColor = 'var(--error)';
 
     const nombre = h.nombre_usuario || h.nombreusuario || 'Desconocido';
 
@@ -867,7 +867,7 @@ function renderHistoryTable() {
         </td>
         <td><span style="color:${statusColor}; font-weight:500; text-transform:uppercase; font-size:0.8rem;">${h.estado || ''}</span></td>
         <td>
-          <button class="btn-icon" title="Ver Detalles de Sesión" onclick="openConversationDetail('${h.conversation_id}', '${h.fecha || ''}')">
+          <button class="btn-icon" title="Ver Detalles de Sesión" onclick="openConversationDetail('${h.conversation_id || h.conversationid}', '${h.fecha || ''}')">
             <span class="material-icons-outlined" style="font-size:18px;">description</span>
           </button>
         </td>
@@ -934,7 +934,7 @@ async function openConversationDetail(convId, dateStr) {
 
         const bubble = `
           <div style="display:flex; flex-direction:column; align-items:${isUser ? 'flex-end' : 'flex-start'}; margin-bottom:12px;">
-            <span style="font-size:0.65rem; color:var(--text-light); margin-bottom:4px; margin-${isUser ? 'right' : 'left'}:4px;">
+            <span style="font-size:0.65rem; color:var(--text-muted); margin-bottom:4px; margin-${isUser ? 'right' : 'left'}:4px;">
               ${isUser ? 'Usuario' : 'Agente'}
             </span>
             <div class="chat-bubble ${bubbleClass}">${text}</div>
@@ -947,7 +947,7 @@ async function openConversationDetail(convId, dateStr) {
     }
 
   } catch (e) {
-    if (container) container.innerHTML = `<p style="text-align:center; color:var(--error-text); margin-top:40px;">Error cargando detalles.</p>`;
+    if (container) container.innerHTML = `<p style="text-align:center; color:var(--error); margin-top:40px;">Error cargando detalles.</p>`;
   }
 }
 
@@ -1051,7 +1051,7 @@ async function toggleRecording() {
 
       if (btn) {
         btn.innerHTML = `<span class="material-icons-outlined" style="vertical-align:middle;">stop_circle</span>`;
-        btn.style.color = 'var(--error-text)';
+        btn.style.color = 'var(--error)';
       }
 
       document.getElementById('record-status').classList.remove('hidden');
@@ -1103,7 +1103,7 @@ async function verifyInspector() {
 
   try {
     const formData = new FormData();
-    formData.append('dni_reclamado', currentInspectorDNI);
+    formData.append('dnireclamado', currentInspectorDNI);
     formData.append('file', wavBlob, 'rec.wav');
 
     const res = await fetch('/verify_file', { method: 'POST', body: formData });
@@ -1111,19 +1111,18 @@ async function verifyInspector() {
 
     setTimeout(cargarCRM, 1000);
 
-    let color = (data.estado === 'GENUINO') ? 'var(--success-text)' : 'var(--error-text)';
-    let bg = (data.estado === 'GENUINO') ? 'var(--success-bg)' : 'var(--error-bg)';
-    let icon = (data.estado === 'GENUINO') ? 'check_circle' : 'cancel';
-
-    if (data.estado === 'AUDIO_INSUFICIENTE') {
-      color = 'var(--warning-text)';
-      bg = 'var(--warning-bg)';
-      icon = 'warning';
-    }
-    if (data.estado === 'DEEPFAKE') {
-      color = 'var(--error-text)';
-      bg = 'var(--error-bg)';
-      icon = 'warning';
+    const _score = (typeof data.score === 'number') ? data.score : parseFloat(data.score || '0');
+    const _scorePct = (isFinite(_score) ? _score * 100 : 0).toFixed(1);
+    const _estado = (data.estado || '').toUpperCase();
+    let color, bg, icon;
+    if (_estado === 'GENUINO') {
+      color = '#1a5c34'; bg = '#d4edda'; icon = 'check_circle';
+    } else if (_estado === 'DEEPFAKE') {
+      color = '#7a1020'; bg = '#fde8ec'; icon = 'warning';
+    } else if (_estado === 'AUDIO_INSUFICIENTE' || _estado === 'AUDIOINSUFICIENTE') {
+      color = '#6b4700'; bg = '#fff3cd'; icon = 'mic_off';
+    } else {
+      color = '#7a1020'; bg = '#fde8ec'; icon = 'cancel';
     }
 
     if (resDiv) {
@@ -1133,7 +1132,7 @@ async function verifyInspector() {
             <span class="material-icons-outlined">${icon}</span>
             <strong>${data.estado}</strong>
           </div>
-          <div style="font-size:0.85rem; margin-top:4px;">Score: ${(Number(data.score || 0) * 100).toFixed(1)}</div>
+          <div style="font-size:0.85rem; margin-top:4px;">Score: ${_scorePct}%</div>
           <div style="font-size:0.8rem; margin-top:4px; color:var(--text-muted);">${data.mensaje || ''}</div>
         </div>
       `;
@@ -1151,7 +1150,7 @@ async function verifyInspector() {
 
 // ==================== CONFIGURACIÓN ====================
 // NOTA: backend actual solo persiste: umbralidentidad, activebiometrics, activedeepfake, deepfakemodel, spybuffersecs.
-// Para el resto (bypass + params por modelo), guardamos en localStorage como fallback para “no romper” y no hardcodear. [file:286]
+// Para el resto (bypass + params por modelo).
 
 const _CFG_EXTRA_LS_KEY = 'voicebio.config.extra.v1';
 
@@ -1211,7 +1210,7 @@ function updateDeepfakeAdvancedUIState() {
   const paramsWrap = _getEl('cfg-deepfake-params-wrap');
   if (paramsWrap) {
     paramsWrap.querySelectorAll('input').forEach(inp => {
-      // No deshabilitar el propio deepfake checkbox (no está dentro normalmente, pero por seguridad)
+      // No deshabilitar el propio deepfake checkbox
       if (inp.id === 'cfg-deepfake') return;
       inp.disabled = !deepOn;
     });
@@ -1313,10 +1312,10 @@ async function saveConfig(e) {
     df1b_maxabs: _readNum('cfg-df1b-maxabs', 0.999),
   };
 
-  // Persistimos extras SIEMPRE en el navegador (fallback)
+  // Persistencias extras SIEMPRE en el navegador (fallback)
   _saveExtraCfgLS(extra);
 
-  // Payload para backend (lo que hoy soporta + compat)
+  // Payload para backend
   const payload = {
     // legacy que main.py normaliza
     umbralidentidad: umbral,
@@ -1325,7 +1324,7 @@ async function saveConfig(e) {
     deepfakemodel: deepfakeModel,
     spybuffersecs: buff,
 
-    // snake (por si tu backend evoluciona)
+    // snake (por si backend evoluciona)
     umbral_identidad: umbral,
     active_biometrics: activeBiom,
     active_deepfake: activeDeep,
